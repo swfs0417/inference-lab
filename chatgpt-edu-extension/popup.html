@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><style>
+body{width:310px;margin:0;padding:18px;background:#f3f1e9;color:#17352e;font:13px system-ui}h1{font:24px Georgia;margin:0 0 16px}label{display:block;margin:11px 0;font-size:11px;color:#66706a}input{box-sizing:border-box;width:100%;padding:9px;margin-top:5px;border:1px solid #ccd2cc;background:white}.toggle{display:flex;align-items:center;gap:8px;color:#17352e}.toggle input{width:auto;margin:0}button{width:100%;margin-top:8px;padding:10px;border:0;background:#17352e;color:white;font-weight:700}.status{margin-top:13px;padding:10px;background:white;border-left:3px solid #d57742;line-height:1.5}.small{font-size:11px;color:#737c76;line-height:1.5}</style></head>
+<body><h1>Edu Timer</h1>
+<label class="toggle"><input id="enabled" type="checkbox"> 자동 측정 활성화</label>
+<label>대시보드 주소<input id="backendUrl" value="http://127.0.0.1:8080"></label>
+<label>모델 라벨<input id="modelLabel" value="GPT Edu"></label>
+<label>완료 판정 대기시간(ms)<input id="completionQuietMs" type="number" value="1800" min="800" step="100"></label>
+<button id="save">설정 저장</button>
+<div id="status" class="status">아직 측정 기록이 없습니다.</div>
+<p class="small">대화 내용과 로그인 정보는 전송하지 않습니다. 시간, 응답 글자 수, 모델 라벨만 저장합니다.</p>
+<script src="popup.js"></script></body></html>

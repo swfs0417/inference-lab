@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Inference Lab</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/details.css">
+</head>
+<body>
+  <header>
+    <div><span class="eyebrow">MODEL SYSTEMS WORKBENCH</span><h1>Inference Lab</h1></div>
+    <div id="health" class="status">서버 확인 중</div>
+  </header>
+  <main>
+    <section class="panel setup">
+      <div class="section-title"><span>01</span><h2>실험 설정</h2></div>
+      <form id="benchmark-form">
+        <label class="wide">OpenAI 호환 엔드포인트<input name="endpoint" value="http://127.0.0.1:8000/v1" required></label>
+        <label>모델 ID<input name="model" value="local-model" required></label>
+        <label>API 키<input name="api_key" type="password" placeholder="선택 사항"></label>
+        <label>반복 횟수<input name="iterations" type="number" value="5" min="1" max="100"></label>
+        <label>동시 요청<input name="concurrency" type="number" value="1" min="1" max="32"></label>
+        <label>측정 조건<select name="condition"><option value="warm">Warm</option><option value="cold">Cold / 모델 미로딩</option><option value="unspecified">미지정</option></select></label>
+        <label>사전 워밍업 횟수<input name="warmup_iterations" type="number" value="1" min="0" max="10"></label>
+        <label>최대 출력 토큰<input name="max_tokens" type="number" value="256" min="1"></label>
+        <label>Temperature<input name="temperature" type="number" value="0" step="0.1" min="0" max="2"></label>
+        <label class="wide">프롬프트<textarea name="prompt" rows="5" required>대규모 언어 모델에서 prefill과 decode 단계의 차이를 설명해줘.</textarea></label>
+        <button id="run-button" type="submit">벤치마크 실행 <span>→</span></button>
+      </form>
+      <p class="hint">API 키는 요청에만 사용되며 DB에 저장하지 않습니다. 외부 호스트는 서버의 ALLOWED_TARGET_HOSTS 설정이 필요합니다.</p>
+    </section>
+
+    <section class="panel results">
+      <div class="section-title"><span>02</span><h2>최근 결과</h2><button id="refresh" class="ghost">새로고침</button></div>
+      <div id="metrics" class="metrics"></div>
+      <canvas id="chart" width="1000" height="280" aria-label="TTFT와 총 지연시간 차트"></canvas>
+      <div id="details" class="details"></div>
+      <div class="table-wrap"><table><thead><tr><th>시간</th><th>소스 / 모델</th><th>성공</th><th>TTFT 평균</th><th>TTFT p95</th><th>총시간 평균</th><th>출력 TPS</th><th>GPU 최고</th></tr></thead><tbody id="runs"></tbody></table></div>
+      <div id="empty" class="empty">아직 실험 결과가 없습니다.</div>
+    </section>
+
+    <section class="panel notes">
+      <div class="section-title"><span>03</span><h2>측정 경계</h2></div>
+      <div class="note-grid">
+        <article><b>API E2E</b><p>요청 직전부터 스트림 완료까지. 네트워크, 큐, 추론을 모두 포함합니다.</p></article>
+        <article><b>GPU 관측</b><p>이 앱이 GPU 추론 서버에서 실행될 때 nvidia-smi를 0.5초 간격으로 샘플링합니다.</p></article>
+        <article><b>GPT Edu</b><p>브라우저 확장 수집 결과는 별도 API로 저장합니다. Edu 내부 GPU/순수 추론시간은 관측할 수 없습니다.</p></article>
+      </div>
+    </section>
+  </main>
+  <div id="toast" role="status"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

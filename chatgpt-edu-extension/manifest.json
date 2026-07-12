@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "GPT Edu Response Timer",
+  "version": "0.1.0",
+  "description": "ChatGPT Edu의 브라우저 체감 TTFT와 전체 응답시간을 측정합니다.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "http://127.0.0.1:8080/*",
+    "http://localhost:8080/*"
+  ],
+  "background": {"service_worker": "background.js"},
+  "content_scripts": [{
+    "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }],
+  "action": {"default_popup": "popup.html", "default_title": "GPT Edu Response Timer"}
+}
