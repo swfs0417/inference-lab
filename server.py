@@ -87,6 +87,7 @@ RUN_EXPORT_COLUMNS = [
     ("total_mean_ms", "total_mean_ms"), ("total_p95_ms", "total_p95_ms"),
     ("output_tps_mean", "output_tps_mean"), ("itl_p95_ms", "itl_p95_ms"),
     ("gpu_util_peak_pct", "gpu_util_peak_pct"), ("energy_wh", "energy_wh"),
+    ("quality_mean", "quality_mean"), ("quality_rated_samples", "quality_rated_samples"),
     ("output_text", "output_text"),
 ]
 
@@ -108,6 +109,8 @@ def flatten_run(run: dict[str, Any]) -> dict[str, Any]:
         "total_mean_ms": summary.get("total_mean_ms"), "total_p95_ms": summary.get("total_p95_ms"),
         "output_tps_mean": summary.get("output_tps_mean"), "itl_p95_ms": summary.get("itl_p95_ms"),
         "gpu_util_peak_pct": gpu.get("gpu_util_peak_pct"), "energy_wh": gpu.get("energy_wh"),
+        "quality_mean": summary.get("quality_mean"),
+        "quality_rated_samples": summary.get("quality_rated_samples"),
         "output_text": output_text,
     }
 
@@ -141,13 +144,18 @@ def export_runs_xlsx(runs: list[dict[str, Any]]) -> bytes:
         "run_id", "sequence", "phase", "status", "error", "ttft_ms", "total_ms",
         "generation_ms", "prompt_tokens", "output_tokens", "output_tokens_per_sec",
         "itl_mean_ms", "itl_p95_ms", "itl_max_ms", "response_chars", "output_text",
+        "quality_correctness", "quality_relevance", "quality_clarity", "quality_note",
     ]
     sample_sheet = workbook.create_sheet("Samples")
     sample_sheet.append(sample_columns)
     for run in runs:
         for sample in run.get("samples", []):
+            quality = sample.get("quality", {})
             sample_sheet.append([
-                spreadsheet_safe(run.get("id") if key == "run_id" else sample.get(key)) for key in sample_columns
+                spreadsheet_safe(
+                    run.get("id") if key == "run_id" else
+                    quality.get(key.removeprefix("quality_")) if key.startswith("quality_") else sample.get(key)
+                ) for key in sample_columns
             ])
 
     header_fill = PatternFill("solid", fgColor="17352E")
@@ -215,7 +223,7 @@ def summarize(samples: list[dict[str, Any]]) -> dict[str, Any]:
     inter_chunk = [float(v) for s in good for v in s.get("inter_chunk_ms", [])]
     prompt_tokens = [int(s["prompt_tokens"]) for s in good if s.get("prompt_tokens") is not None]
     output_tokens = [int(s["output_tokens"]) for s in good if s.get("output_tokens") is not None]
-    return {
+    result = {
         "requests": len(samples), "successes": len(good), "errors": len(samples) - len(good),
         "ttft_mean_ms": round(statistics.fmean(ttft), 2) if ttft else None,
         "ttft_p50_ms": percentile(ttft, .50), "ttft_p95_ms": percentile(ttft, .95),
@@ -228,6 +236,41 @@ def summarize(samples: list[dict[str, Any]]) -> dict[str, Any]:
         "prompt_tokens_mean": round(statistics.fmean(prompt_tokens), 2) if prompt_tokens else None,
         "output_tokens_mean": round(statistics.fmean(output_tokens), 2) if output_tokens else None,
     }
+    ratings = [s["quality"] for s in good if s.get("quality")]
+    for criterion in ("correctness", "relevance", "clarity"):
+        values = [float(r[criterion]) for r in ratings if r.get(criterion) is not None]
+        result[f"quality_{criterion}_mean"] = round(statistics.fmean(values), 2) if values else None
+    sample_means = [statistics.fmean(float(r[k]) for k in ("correctness", "relevance", "clarity")) for r in ratings]
+    result["quality_mean"] = round(statistics.fmean(sample_means), 2) if sample_means else None
+    result["quality_rated_samples"] = len(ratings)
+    return result
+
+
+def save_quality_rating(run_id: str, sequence: int, rating: dict[str, Any]) -> dict[str, Any]:
+    criteria = ("correctness", "relevance", "clarity")
+    scores = {key: int(rating[key]) for key in criteria}
+    if any(score < 1 or score > 5 for score in scores.values()):
+        raise ValueError("품질 점수는 1~5 사이여야 합니다.")
+    note = str(rating.get("note", "")).strip()
+    if len(note) > 1000:
+        raise ValueError("평가 메모는 1000자 이하여야 합니다.")
+    with DB_LOCK, closing(sqlite3.connect(DB_PATH)) as db:
+        row = db.execute("SELECT samples_json, summary_json FROM runs WHERE id = ?", (run_id,)).fetchone()
+        if not row:
+            raise ValueError("실행 결과를 찾을 수 없습니다.")
+        samples, summary = json.loads(row[0]), json.loads(row[1])
+        sample = next((item for item in samples if int(item.get("sequence", -1)) == sequence), None)
+        if not sample or not sample.get("output_text"):
+            raise ValueError("평가할 모델 응답을 찾을 수 없습니다.")
+        sample["quality"] = {**scores, "note": note}
+        quality_summary = summarize(samples)
+        summary.update({key: value for key, value in quality_summary.items() if key.startswith("quality_")})
+        db.execute(
+            "UPDATE runs SET samples_json = ?, summary_json = ? WHERE id = ?",
+            (json.dumps(samples, ensure_ascii=False), json.dumps(summary, ensure_ascii=False), run_id),
+        )
+        db.commit()
+    return {"quality": sample["quality"], "summary": summary}
 
 
 def summarize_gpu(samples: list[dict[str, Any]]) -> dict[str, Any]:
@@ -493,6 +536,10 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json(run, 201)
             elif self.path == "/api/pdf-to-markdown":
                 self.send_json(convert_pdf_to_markdown(payload.get("filename", "document.pdf"), payload.get("data", "")))
+            elif self.path == "/api/quality-rating":
+                if not payload.get("run_id") or payload.get("sequence") is None:
+                    raise ValueError("run_id와 sequence가 필요합니다.")
+                self.send_json(save_quality_rating(str(payload["run_id"]), int(payload["sequence"]), payload))
             else:
                 self.send_json({"error": "not found"}, 404)
         except (ValueError, KeyError, json.JSONDecodeError) as exc:

@@ -35,6 +35,7 @@ function renderMetrics(run) {
     ['완료 p95', fmt(s.total_p95_ms)], ['출력 속도', fmt(s.output_tps_mean, ' tok/s')],
     ['ITL p95', fmt(s.itl_p95_ms)], ['GPU 평균 / 최고', g.available ? `${fmt(g.gpu_util_mean_pct,'%')} / ${fmt(g.gpu_util_peak_pct,'%')}` : '—'],
     ['VRAM 최고', g.available ? fmt(g.memory_peak_mb,' MB') : '—'], ['에너지', g.available ? fmt(g.energy_wh,' Wh') : '—'],
+    ['품질 평균', s.quality_mean == null ? '미평가' : `${fmt(s.quality_mean, '')} / 5`],
     ['성공률', `${s.successes}/${s.requests}`], ['조건', run.settings?.condition || '—']
   ].map(([k,v]) => `<article><span>${k}</span><strong>${v}</strong></article>`).join('');
   const env=run.settings?.environment||{};
@@ -59,7 +60,23 @@ function renderOutputs(run) {
     const article = document.createElement('details'), label = document.createElement('summary'), output = document.createElement('pre');
     label.textContent = `요청 ${sample.sequence} · ${fmt(sample.total_ms)} · ${(sample.response_chars ?? sample.output_text.length).toLocaleString()}자`;
     output.textContent = sample.output_text;
-    article.append(label, output); container.append(article);
+    const editor = document.createElement('div'); editor.className = 'quality-editor';
+    ['correctness:정확성', 'relevance:관련성', 'clarity:명료성'].forEach(item => {
+      const [key, text] = item.split(':'), field = document.createElement('label'), select = document.createElement('select');
+      field.textContent = text;
+      for (let score=1; score<=5; score++) { const option=document.createElement('option'); option.value=score; option.textContent=`${score}점`; select.append(option); }
+      select.value = sample.quality?.[key] || 3; select.dataset.criterion = key; field.append(select); editor.append(field);
+    });
+    const note = document.createElement('textarea'); note.placeholder = '평가 근거 (선택, 최대 1000자)'; note.maxLength = 1000; note.value = sample.quality?.note || '';
+    const save = document.createElement('button'); save.type = 'button'; save.textContent = sample.quality ? '평가 수정' : '평가 저장';
+    save.onclick = async () => {
+      save.disabled = true;
+      const payload = {run_id: run.id, sequence: sample.sequence, note: note.value};
+      editor.querySelectorAll('select').forEach(select => payload[select.dataset.criterion] = Number(select.value));
+      try { await jsonFetch('/api/quality-rating', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)}); toast('품질 평가를 저장했습니다.'); await load(run.id); }
+      catch(e) { toast(e.message, true); save.disabled = false; }
+    };
+    editor.append(note, save); article.append(label, output, editor); container.append(article);
   });
 }
 
@@ -79,13 +96,13 @@ function drawChart(run) {
   ctx.fillStyle='#1d3c34';ctx.fillRect(width-190,8,10,10);ctx.fillStyle='#4d5751';ctx.fillText('총 지연',width-174,17);ctx.fillStyle='#d57742';ctx.fillRect(width-100,8,10,10);ctx.fillStyle='#4d5751';ctx.fillText('TTFT',width-84,17);
 }
 
-async function load() {
+async function load(selectedId) {
   try {
     const [{runs}, health] = await Promise.all([jsonFetch('/api/runs'), jsonFetch('/api/health')]);
     $('#health').textContent = health.gpu.length ? `GPU ${health.gpu.length}개 연결` : '서버 연결 · GPU 없음';
     $('#health').classList.add('ok'); $('#empty').style.display = runs.length ? 'none' : 'block';
-    $('#runs').innerHTML = runs.map(r => `<tr data-id="${r.id}"><td>${r.created_at}</td><td><b>${r.model||'—'}</b><small>${r.source}</small></td><td>${r.summary.successes}/${r.summary.requests}</td><td>${fmt(r.summary.ttft_mean_ms)}</td><td>${fmt(r.summary.ttft_p95_ms)}</td><td>${fmt(r.summary.total_mean_ms)}</td><td>${fmt(r.summary.output_tps_mean,'')}</td><td>${fmt(gpuPeak(r),'%')}</td></tr>`).join('');
-    renderMetrics(runs[0]); drawChart(runs[0]);
+    $('#runs').innerHTML = runs.map(r => `<tr data-id="${r.id}"><td>${r.created_at}</td><td><b>${r.model||'—'}</b><small>${r.source}</small></td><td>${r.summary.quality_mean==null?'미평가':fmt(r.summary.quality_mean,' / 5')}</td><td>${r.summary.successes}/${r.summary.requests}</td><td>${fmt(r.summary.ttft_mean_ms)}</td><td>${fmt(r.summary.ttft_p95_ms)}</td><td>${fmt(r.summary.total_mean_ms)}</td><td>${fmt(r.summary.output_tps_mean,'')}</td><td>${fmt(gpuPeak(r),'%')}</td></tr>`).join('');
+    const selected = runs.find(run => run.id === selectedId) || runs[0]; renderMetrics(selected); drawChart(selected);
     [...document.querySelectorAll('tbody tr')].forEach((tr,i)=>tr.onclick=()=>{renderMetrics(runs[i]);drawChart(runs[i]);});
   } catch(e) { $('#health').textContent='서버 오류'; toast(e.message,true); }
 }

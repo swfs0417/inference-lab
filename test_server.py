@@ -32,6 +32,15 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(summary["itl_p95_ms"], 11.8)
         self.assertEqual(summary["prompt_tokens_mean"], 10)
 
+    def test_summary_includes_manual_quality(self):
+        summary = server.summarize([
+            {"error": None, "quality": {"correctness": 5, "relevance": 4, "clarity": 3}},
+            {"error": None, "quality": {"correctness": 3, "relevance": 4, "clarity": 5}},
+        ])
+        self.assertEqual(summary["quality_mean"], 4)
+        self.assertEqual(summary["quality_correctness_mean"], 4)
+        self.assertEqual(summary["quality_rated_samples"], 2)
+
     def test_gpu_summary_and_energy(self):
         summary = server.summarize_gpu([
             {"at_ms": 0, "gpus": [{"gpu_util_pct": 20, "memory_used_mb": 1000, "power_w": 100, "temperature_c": 50}]},
@@ -78,6 +87,26 @@ class PersistenceTests(unittest.TestCase):
                 self.assertEqual(run["id"], "test-run")
                 self.assertEqual(run["summary"]["requests"], 1)
                 self.assertEqual(run["samples"][0]["output_text"], "저장된 응답")
+        finally:
+            server.DB_PATH = previous
+
+    def test_quality_rating_updates_sample_and_summary(self):
+        previous = server.DB_PATH
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                server.DB_PATH = Path(tmp) / "test.db"
+                server.init_db()
+                server.save_run({
+                    "id": "rated-run", "source": "test", "model": "model", "endpoint": "local",
+                    "settings": {}, "summary": server.summarize([{"sequence": 1, "output_text": "answer", "error": None}]),
+                    "samples": [{"sequence": 1, "output_text": "answer", "error": None}], "gpu": [],
+                })
+                server.save_quality_rating("rated-run", 1, {
+                    "correctness": 5, "relevance": 4, "clarity": 3, "note": "근거 있음",
+                })
+                run = server.list_runs(1)[0]
+                self.assertEqual(run["samples"][0]["quality"]["note"], "근거 있음")
+                self.assertEqual(run["summary"]["quality_mean"], 4)
         finally:
             server.DB_PATH = previous
 
