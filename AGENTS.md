@@ -19,10 +19,10 @@ Inference Lab is a dependency-light educational benchmark for OpenAI-compatible 
 Run commands from the repository root on Python 3.10+.
 
 ```powershell
-python -m pip install -r requirements.txt
-python server.py
-python -m unittest -v
-python -m py_compile server.py test_server.py
+uv sync
+uv run server.py
+uv run python -m unittest -v
+uv run python -m py_compile server.py test_server.py
 ```
 
 The app defaults to `http://127.0.0.1:8080`. Use `--host`/`--port` or `HOST`/`PORT` to override it. Set `BENCHMARK_DB` for an isolated database during manual testing.

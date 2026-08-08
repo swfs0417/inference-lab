@@ -6,8 +6,8 @@ OpenAI 호환 API(vLLM, Ollama 프록시 등)의 스트리밍 응답 시간과, 
 
 ```powershell
 cd inference-lab
-python -m pip install -r requirements.txt
-python server.py
+uv sync
+uv run server.py
 ```
 
 브라우저에서 `http://127.0.0.1:8080`을 엽니다.
@@ -16,7 +16,7 @@ python server.py
 
 ```powershell
 $env:ALLOWED_TARGET_HOSTS="127.0.0.1,localhost,10.0.0.25"
-python server.py --host 0.0.0.0 --port 8080
+uv run server.py --host 0.0.0.0 --port 8080
 ```
 
 `ALLOWED_TARGET_HOSTS`는 벤치마크 대상 추론 서버의 호스트 목록입니다. 임의 URL 호출을 막기 위해 기본값은 로컬 주소만 허용합니다. 테스트 전용 폐쇄망이 아니라면 `*`는 사용하지 마세요.
