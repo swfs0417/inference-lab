@@ -467,12 +467,6 @@ class Handler(SimpleHTTPRequestHandler):
         elif parsed.path == "/api/examples/transformer-paper.md":
             path = ROOT / "examples" / "transformer-paper.md"
             self.send_file(path.read_bytes(), "text/markdown; charset=utf-8")
-        elif parsed.path == "/api/examples/transformer-results.xlsx":
-            path = ROOT / "outputs" / "examples" / "transformer-paper-results.xlsx"
-            self.send_file(
-                path.read_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                "transformer-paper-results.xlsx",
-            )
         elif parsed.path.startswith("/api/"):
             self.send_json({"error": "not found"}, 404)
         else:

@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/details.css">
   <style>
-    select{display:block;width:100%;margin-top:7px;padding:12px;border:1px solid var(--line);background:#fff;color:var(--ink);font:14px ui-monospace,monospace}.setup,.converter,.notes{grid-column:1}.results{grid-column:2;grid-row:1/span 3}.single-column{grid-template-columns:1fr}.title-actions,.result-actions{display:flex;align-items:center;gap:8px}.title-actions{margin-left:auto}.ghost{display:inline-block;text-decoration:none;font:700 12px ui-sans-serif,system-ui}.title-actions .ghost,.result-actions .ghost{margin-left:0}.pdf-result{margin-top:18px}.result-actions{justify-content:space-between}.pdf-result pre{max-height:340px;overflow:auto;white-space:pre-wrap;background:#fff;border:1px solid var(--line);padding:14px;color:#33433d;font:12px/1.55 ui-monospace,monospace}.model-outputs{margin:24px 0}.model-outputs h3{font-size:14px}.model-outputs article{margin-top:10px}.model-outputs article>b{display:block;color:var(--muted);font:11px ui-monospace,monospace}.model-outputs pre{max-height:260px;overflow:auto;white-space:pre-wrap;background:#fff;border:1px solid var(--line);padding:14px;color:#273a34;font:13px/1.65 ui-monospace,monospace}.example-output{margin-top:18px;padding:16px;border-left:3px solid var(--accent);background:#fff}.example-output p{margin:7px 0 13px;color:var(--muted);font-size:12px;line-height:1.5}@media(max-width:900px){.setup,.converter,.results,.notes{grid-column:auto;grid-row:auto}}@media(max-width:520px){.section-title{align-items:flex-start;flex-wrap:wrap}.title-actions{width:100%;margin-left:0}}
+    select{display:block;width:100%;margin-top:7px;padding:12px;border:1px solid var(--line);background:#fff;color:var(--ink);font:14px ui-monospace,monospace}.setup,.converter,.notes{grid-column:1}.results{grid-column:2;grid-row:1/span 3}.single-column{grid-template-columns:1fr}.title-actions,.result-actions,.output-actions{display:flex;align-items:center;gap:8px}.title-actions{margin-left:auto}.ghost{display:inline-block;text-decoration:none;font:700 12px ui-sans-serif,system-ui}.title-actions .ghost,.result-actions .ghost{margin-left:0}.pdf-result{margin-top:18px}.result-actions{justify-content:space-between}.pdf-result pre{max-height:340px;overflow:auto;white-space:pre-wrap;background:#fff;border:1px solid var(--line);padding:14px;color:#33433d;font:12px/1.55 ui-monospace,monospace}.model-outputs{margin:24px 0}.model-outputs h3{font-size:14px}.model-outputs article{margin-top:10px}.model-outputs article>b{display:block;color:var(--muted);font:11px ui-monospace,monospace}.model-outputs pre{max-height:260px;overflow:auto;white-space:pre-wrap;background:#fff;border:1px solid var(--line);padding:14px;color:#273a34;font:13px/1.65 ui-monospace,monospace}.example-output{margin-top:18px;padding:16px;border-left:3px solid var(--accent);background:#fff}.example-output p{margin:7px 0 13px;color:var(--muted);font-size:12px;line-height:1.5}@media(max-width:900px){.setup,.converter,.results,.notes{grid-column:auto;grid-row:auto}}@media(max-width:520px){.section-title{align-items:flex-start;flex-wrap:wrap}.title-actions{width:100%;margin-left:0}}
   </style>
 </head>
 <body>
@@ -43,16 +43,13 @@
       </form>
       <p class="hint">PyMuPDF4LLM이 문단, 제목, 표 구조를 Markdown으로 변환합니다.</p>
       <div id="pdf-result" class="pdf-result" hidden>
-        <div class="result-actions"><b id="pdf-meta"></b><button id="download-md" class="ghost" type="button">.md 저장</button></div>
+        <div class="result-actions"><b id="pdf-meta"></b><div class="output-actions"><button id="use-md" class="ghost" type="button">프롬프트에 넣기</button><button id="download-md" class="ghost" type="button">.md 저장</button></div></div>
         <pre id="markdown-preview"></pre>
       </div>
       <div class="example-output">
-        <b>Transformer 논문 예시</b>
-        <p>동일한 논문 변환 결과와 LLM 실험 결과 예시를 함께 확인할 수 있습니다.</p>
-        <div class="result-actions">
-          <a class="ghost" href="/api/examples/transformer-paper.md" target="_blank">Markdown 보기</a>
-          <a class="ghost" href="/api/examples/transformer-results.xlsx">Excel 받기</a>
-        </div>
+        <b>Transformer 논문 변환 예시</b>
+        <p>PDF를 변환한 Markdown 결과만 확인할 수 있습니다.</p>
+        <a class="ghost" href="/api/examples/transformer-paper.md" target="_blank">변환 결과 보기</a>
       </div>
     </section>
 

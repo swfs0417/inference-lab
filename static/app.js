@@ -122,4 +122,11 @@ $('#download-md').onclick = () => {
   const link = document.createElement('a'); link.href = url; link.download = convertedMarkdown.filename; link.click();
   URL.revokeObjectURL(url);
 };
+$('#use-md').onclick = () => {
+  if (!convertedMarkdown) return;
+  const prompt = document.querySelector('[name="prompt"]');
+  prompt.value = convertedMarkdown.markdown;
+  prompt.focus(); prompt.scrollIntoView({behavior: 'smooth', block: 'center'});
+  toast('변환 결과를 프롬프트에 넣었습니다.');
+};
 $('#refresh').onclick=load; addEventListener('resize',()=>load()); load();
