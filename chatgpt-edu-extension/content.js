@@ -118,6 +118,7 @@
       total_ms: Number((ended - p.startedPerf).toFixed(2)),
       generation_ms: Number(generationMs.toFixed(2)),
       response_chars: chars,
+      output_text: p.lastText,
       output_tokens: estimatedTokens,
       output_tokens_per_sec: generationMs > 0 ? Number((estimatedTokens / (generationMs / 1000)).toFixed(2)) : null,
       error: null

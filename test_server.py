@@ -72,11 +72,12 @@ class PersistenceTests(unittest.TestCase):
                 server.save_run({
                     "id": "test-run", "source": "test", "model": "model",
                     "endpoint": "local", "settings": {}, "summary": {"requests": 1},
-                    "samples": [{"total_ms": 1}], "gpu": [],
+                    "samples": [{"total_ms": 1, "output_text": "저장된 응답"}], "gpu": [],
                 })
                 run = server.list_runs(1)[0]
                 self.assertEqual(run["id"], "test-run")
                 self.assertEqual(run["summary"]["requests"], 1)
+                self.assertEqual(run["samples"][0]["output_text"], "저장된 응답")
         finally:
             server.DB_PATH = previous
 

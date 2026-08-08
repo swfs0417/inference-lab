@@ -56,8 +56,8 @@ function renderOutputs(run) {
   if (!samples.length) return;
   const title = document.createElement('h3'); title.textContent = '모델 응답'; container.append(title);
   samples.forEach(sample => {
-    const article = document.createElement('article'), label = document.createElement('b'), output = document.createElement('pre');
-    label.textContent = `요청 ${sample.sequence} · ${fmt(sample.total_ms)}`;
+    const article = document.createElement('details'), label = document.createElement('summary'), output = document.createElement('pre');
+    label.textContent = `요청 ${sample.sequence} · ${fmt(sample.total_ms)} · ${(sample.response_chars ?? sample.output_text.length).toLocaleString()}자`;
     output.textContent = sample.output_text;
     article.append(label, output); container.append(article);
   });
