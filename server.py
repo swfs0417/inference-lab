@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import csv
+import io
 import json
 import os
 import platform
@@ -8,6 +11,7 @@ import sqlite3
 import statistics
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -73,6 +77,125 @@ def list_runs(limit: int = 50) -> list[dict[str, Any]]:
             item[key] = json.loads(item[key])
         output.append(item)
     return output
+
+
+RUN_EXPORT_COLUMNS = [
+    ("run_id", "id"), ("created_at", "created_at"), ("source", "source"),
+    ("model", "model"), ("endpoint", "endpoint"), ("prompt", "prompt"),
+    ("condition", "condition"), ("requests", "requests"), ("successes", "successes"),
+    ("errors", "errors"), ("ttft_mean_ms", "ttft_mean_ms"), ("ttft_p95_ms", "ttft_p95_ms"),
+    ("total_mean_ms", "total_mean_ms"), ("total_p95_ms", "total_p95_ms"),
+    ("output_tps_mean", "output_tps_mean"), ("itl_p95_ms", "itl_p95_ms"),
+    ("gpu_util_peak_pct", "gpu_util_peak_pct"), ("energy_wh", "energy_wh"),
+    ("output_text", "output_text"),
+]
+
+
+def spreadsheet_safe(value: Any) -> Any:
+    return "'" + value if isinstance(value, str) and value.startswith(("=", "+", "-", "@")) else value
+
+
+def flatten_run(run: dict[str, Any]) -> dict[str, Any]:
+    summary, settings = run.get("summary", {}), run.get("settings", {})
+    gpu = summary.get("gpu", {})
+    output_text = next((sample.get("output_text") for sample in run.get("samples", []) if sample.get("output_text")), None)
+    return {
+        "id": run.get("id"), "created_at": run.get("created_at"), "source": run.get("source"),
+        "model": run.get("model"), "endpoint": run.get("endpoint"), "prompt": settings.get("prompt"),
+        "condition": settings.get("condition"), "requests": summary.get("requests"),
+        "successes": summary.get("successes"), "errors": summary.get("errors"),
+        "ttft_mean_ms": summary.get("ttft_mean_ms"), "ttft_p95_ms": summary.get("ttft_p95_ms"),
+        "total_mean_ms": summary.get("total_mean_ms"), "total_p95_ms": summary.get("total_p95_ms"),
+        "output_tps_mean": summary.get("output_tps_mean"), "itl_p95_ms": summary.get("itl_p95_ms"),
+        "gpu_util_peak_pct": gpu.get("gpu_util_peak_pct"), "energy_wh": gpu.get("energy_wh"),
+        "output_text": output_text,
+    }
+
+
+def export_runs_csv(runs: list[dict[str, Any]]) -> bytes:
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow([label for label, _ in RUN_EXPORT_COLUMNS])
+    for run in runs:
+        row = flatten_run(run)
+        writer.writerow([spreadsheet_safe(row.get(key)) for _, key in RUN_EXPORT_COLUMNS])
+    return output.getvalue().encode("utf-8-sig")
+
+
+def export_runs_xlsx(runs: list[dict[str, Any]]) -> bytes:
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
+    except ImportError as exc:
+        raise RuntimeError("Excel 내보내기를 사용하려면 pip install -r requirements.txt를 실행하세요.") from exc
+
+    workbook = Workbook()
+    run_sheet = workbook.active
+    run_sheet.title = "Runs"
+    run_sheet.append([label for label, _ in RUN_EXPORT_COLUMNS])
+    for run in runs:
+        row = flatten_run(run)
+        run_sheet.append([spreadsheet_safe(row.get(key)) for _, key in RUN_EXPORT_COLUMNS])
+
+    sample_columns = [
+        "run_id", "sequence", "phase", "status", "error", "ttft_ms", "total_ms",
+        "generation_ms", "prompt_tokens", "output_tokens", "output_tokens_per_sec",
+        "itl_mean_ms", "itl_p95_ms", "itl_max_ms", "response_chars", "output_text",
+    ]
+    sample_sheet = workbook.create_sheet("Samples")
+    sample_sheet.append(sample_columns)
+    for run in runs:
+        for sample in run.get("samples", []):
+            sample_sheet.append([
+                spreadsheet_safe(run.get("id") if key == "run_id" else sample.get(key)) for key in sample_columns
+            ])
+
+    header_fill = PatternFill("solid", fgColor="17352E")
+    for sheet in (run_sheet, sample_sheet):
+        sheet.freeze_panes = "A2"
+        sheet.auto_filter.ref = sheet.dimensions
+        for cell in sheet[1]:
+            cell.fill = header_fill
+            cell.font = Font(color="FFFFFF", bold=True)
+        for column in sheet.columns:
+            width = min(48, max(11, max(len(str(cell.value or "")) for cell in column) + 2))
+            sheet.column_dimensions[column[0].column_letter].width = width
+    sample_sheet.column_dimensions["P"].width = 60
+    for row_number, cell in enumerate(sample_sheet["P"][1:], start=2):
+        cell.alignment = Alignment(wrap_text=True, vertical="top")
+        lines = max(1, str(cell.value or "").count("\n") + (len(str(cell.value or "")) + 79) // 80)
+        sample_sheet.row_dimensions[row_number].height = min(90, 15 * lines)
+
+    output = io.BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
+def convert_pdf_to_markdown(filename: str, encoded_pdf: str) -> dict[str, Any]:
+    try:
+        pdf = base64.b64decode(encoded_pdf, validate=True)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("PDF 데이터가 올바르지 않습니다.") from exc
+    if len(pdf) > 20 * 1024 * 1024:
+        raise ValueError("PDF는 20MB 이하여야 합니다.")
+    if not pdf.startswith(b"%PDF"):
+        raise ValueError("PDF 파일만 변환할 수 있습니다.")
+    try:
+        import pymupdf4llm
+    except ImportError as exc:
+        raise RuntimeError("PDF 변환을 사용하려면 pip install -r requirements.txt를 실행하세요.") from exc
+
+    started = now_ms()
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "input.pdf"
+        path.write_bytes(pdf)
+        chunks = pymupdf4llm.to_markdown(str(path), page_chunks=True)
+    markdown = "\n\n---\n\n".join(chunk.get("text", "").strip() for chunk in chunks).strip()
+    return {
+        "filename": Path(filename or "document.pdf").stem + ".md",
+        "markdown": markdown, "pages": len(chunks), "characters": len(markdown),
+        "elapsed_ms": round(now_ms() - started, 2), "library": "PyMuPDF4LLM",
+    }
 
 
 def percentile(values: list[float], p: float) -> float | None:
@@ -200,6 +323,8 @@ def benchmark_once(settings: dict[str, Any], sequence: int) -> dict[str, Any]:
         "max_tokens": int(settings.get("max_tokens", 256)),
         "stream_options": {"include_usage": True},
     }
+    if settings.get("reasoning_effort"):
+        body["reasoning_effort"] = settings["reasoning_effort"]
     headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
     if settings.get("api_key"):
         headers["Authorization"] = "Bearer " + settings["api_key"]
@@ -237,9 +362,10 @@ def benchmark_once(settings: dict[str, Any], sequence: int) -> dict[str, Any]:
                     chunk_times.append(round(stamp - started, 3))
                     content.append(delta)
         ended = now_ms()
+        output_text = "".join(content)
         output_tokens = usage.get("completion_tokens")
         if output_tokens is None:
-            output_tokens = max(1, round(len("".join(content)) / 3.5)) if content else 0
+            output_tokens = max(1, round(len(output_text) / 3.5)) if output_text else 0
         generation_ms = (ended - first_token_at) if first_token_at is not None else None
         inter_chunk = [round(current - previous, 3) for previous, current in zip(chunk_times, chunk_times[1:])]
         return {
@@ -250,7 +376,7 @@ def benchmark_once(settings: dict[str, Any], sequence: int) -> dict[str, Any]:
             "chunk_offsets_ms": chunk_times, "inter_chunk_ms": inter_chunk,
             "itl_mean_ms": round(statistics.fmean(inter_chunk), 3) if inter_chunk else None,
             "itl_p95_ms": percentile(inter_chunk, .95), "itl_max_ms": round(max(inter_chunk), 3) if inter_chunk else None,
-            "response_chars": len("".join(content)), "error": None,
+            "response_chars": len(output_text), "output_text": output_text, "error": None,
         }
     except (urllib.error.URLError, TimeoutError, ValueError) as exc:
         return {"sequence": sequence, "ttft_ms": None, "total_ms": round(now_ms() - started, 3), "error": str(exc)}
@@ -258,6 +384,8 @@ def benchmark_once(settings: dict[str, Any], sequence: int) -> dict[str, Any]:
 
 def run_benchmark(settings: dict[str, Any]) -> dict[str, Any]:
     validate_endpoint(settings["endpoint"])
+    if settings.get("reasoning_effort") not in (None, "none", "low", "medium", "high"):
+        raise ValueError("reasoning_effort 값이 올바르지 않습니다.")
     iterations = max(1, min(int(settings.get("iterations", 3)), 100))
     concurrency = max(1, min(int(settings.get("concurrency", 1)), 32))
     warmup_iterations = max(0, min(int(settings.get("warmup_iterations", 0)), 10))
@@ -306,9 +434,19 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def read_json(self) -> dict[str, Any]:
+    def send_file(self, data: bytes, content_type: str, filename: str | None = None) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        if filename:
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        self.end_headers()
+        self.wfile.write(data)
+
+    def read_json(self, max_bytes: int = 2_000_000) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0"))
-        if length > 2_000_000:
+        if length > max_bytes:
             raise ValueError("요청 본문이 너무 큽니다.")
         return json.loads(self.rfile.read(length) or b"{}")
 
@@ -318,6 +456,23 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({"ok": True, "gpu": gpu_snapshot(), "db": str(DB_PATH)})
         elif parsed.path == "/api/runs":
             self.send_json({"runs": list_runs()})
+        elif parsed.path == "/api/runs.csv":
+            self.send_file(export_runs_csv(list_runs(1000)), "text/csv; charset=utf-8", "llm-experiments.csv")
+        elif parsed.path == "/api/runs.xlsx":
+            self.send_file(
+                export_runs_xlsx(list_runs(1000)),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "llm-experiments.xlsx",
+            )
+        elif parsed.path == "/api/examples/transformer-paper.md":
+            path = ROOT / "examples" / "transformer-paper.md"
+            self.send_file(path.read_bytes(), "text/markdown; charset=utf-8")
+        elif parsed.path == "/api/examples/transformer-results.xlsx":
+            path = ROOT / "outputs" / "examples" / "transformer-paper-results.xlsx"
+            self.send_file(
+                path.read_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "transformer-paper-results.xlsx",
+            )
         elif parsed.path.startswith("/api/"):
             self.send_json({"error": "not found"}, 404)
         else:
@@ -325,7 +480,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:
         try:
-            payload = self.read_json()
+            payload = self.read_json(30_000_000 if self.path == "/api/pdf-to-markdown" else 2_000_000)
             if self.path == "/api/benchmark":
                 required = ("endpoint", "model", "prompt")
                 if any(not payload.get(k) for k in required):
@@ -342,6 +497,8 @@ class Handler(SimpleHTTPRequestHandler):
                 }
                 save_run(run)
                 self.send_json(run, 201)
+            elif self.path == "/api/pdf-to-markdown":
+                self.send_json(convert_pdf_to_markdown(payload.get("filename", "document.pdf"), payload.get("data", "")))
             else:
                 self.send_json({"error": "not found"}, 404)
         except (ValueError, KeyError, json.JSONDecodeError) as exc:

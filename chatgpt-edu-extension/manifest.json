@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "GPT Edu Response Timer",
-  "version": "0.1.0",
-  "description": "ChatGPT Edu의 브라우저 체감 TTFT와 전체 응답시간을 측정합니다.",
+  "version": "0.2.0",
+  "description": "ChatGPT Edu의 응답시간을 측정하고 Inference Lab 결과와 함께 표시합니다.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://chatgpt.com/*",

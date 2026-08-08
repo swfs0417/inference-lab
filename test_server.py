@@ -1,3 +1,4 @@
+import io
 import os
 import tempfile
 import unittest
@@ -53,6 +54,13 @@ class MetricsTests(unittest.TestCase):
             else:
                 os.environ["ALLOWED_TARGET_HOSTS"] = previous
 
+    def test_rejects_invalid_reasoning_effort(self):
+        with self.assertRaisesRegex(ValueError, "reasoning_effort"):
+            server.run_benchmark({
+                "endpoint": "http://127.0.0.1:11434/v1", "model": "test",
+                "prompt": "test", "reasoning_effort": "maximum",
+            })
+
 
 class PersistenceTests(unittest.TestCase):
     def test_round_trip(self):
@@ -71,6 +79,38 @@ class PersistenceTests(unittest.TestCase):
                 self.assertEqual(run["summary"]["requests"], 1)
         finally:
             server.DB_PATH = previous
+
+
+class ExportTests(unittest.TestCase):
+    def setUp(self):
+        self.runs = [{
+            "id": "run-1", "created_at": "2026-08-08 12:00:00", "source": "test",
+            "model": "model", "endpoint": "local", "settings": {"prompt": "=unsafe", "condition": "warm"},
+            "summary": {"requests": 1, "successes": 1, "errors": 0, "ttft_mean_ms": 100},
+            "samples": [{
+                "sequence": 1, "phase": "first-measured", "ttft_ms": 100,
+                "total_ms": 500, "output_text": "=output",
+            }],
+        }]
+
+    def test_csv_export_includes_prompt_and_blocks_formula_injection(self):
+        csv_text = server.export_runs_csv(self.runs).decode("utf-8-sig")
+        self.assertIn("prompt", csv_text)
+        self.assertIn("'=unsafe", csv_text)
+        self.assertIn("'=output", csv_text)
+
+    def test_xlsx_export_has_run_and_sample_sheets(self):
+        from openpyxl import load_workbook
+
+        workbook = load_workbook(io.BytesIO(server.export_runs_xlsx(self.runs)), read_only=True)
+        self.assertEqual(workbook.sheetnames, ["Runs", "Samples"])
+        self.assertEqual(workbook["Runs"]["F2"].value, "'=unsafe")
+        self.assertEqual(workbook["Samples"]["A2"].value, "run-1")
+        self.assertEqual(workbook["Samples"]["P2"].value, "'=output")
+
+    def test_pdf_converter_rejects_non_pdf(self):
+        with self.assertRaisesRegex(ValueError, "PDF 파일만"):
+            server.convert_pdf_to_markdown("note.txt", "aGVsbG8=")
 
 
 if __name__ == "__main__":

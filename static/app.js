@@ -13,13 +13,22 @@ async function jsonFetch(url, options) {
   return data;
 }
 
+function fileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',', 2)[1]);
+    reader.onerror = () => reject(new Error('파일을 읽지 못했습니다.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 function gpuPeak(run) {
   const values = (run.gpu || []).flatMap(s => (s.gpus || []).map(g => g.gpu_util_pct));
   return values.length ? Math.max(...values) : null;
 }
 
 function renderMetrics(run) {
-  if (!run) { $('#metrics').innerHTML = ''; $('#details').innerHTML = ''; return; }
+  if (!run) { $('#metrics').innerHTML = ''; $('#details').innerHTML = ''; renderOutputs(null); return; }
   const s = run.summary, g = s.gpu || {};
   $('#metrics').innerHTML = [
     ['TTFT p50', fmt(s.ttft_p50_ms)], ['TTFT p95', fmt(s.ttft_p95_ms)],
@@ -37,6 +46,21 @@ function renderMetrics(run) {
     <div><span>환경</span><b>${env.gpus?.[0]?.name||'외부/브라우저'} · ${env.os||'환경정보 없음'}</b></div>
     <div><span>워밍업</span><b>${run.settings?.warmup_iterations||0}회 · 측정 ${s.requests}회</b></div>
   </div>`;
+  renderOutputs(run);
+}
+
+function renderOutputs(run) {
+  const container = $('#outputs');
+  container.replaceChildren();
+  const samples = (run?.samples || []).filter(sample => sample.output_text);
+  if (!samples.length) return;
+  const title = document.createElement('h3'); title.textContent = '모델 응답'; container.append(title);
+  samples.forEach(sample => {
+    const article = document.createElement('article'), label = document.createElement('b'), output = document.createElement('pre');
+    label.textContent = `요청 ${sample.sequence} · ${fmt(sample.total_ms)}`;
+    output.textContent = sample.output_text;
+    article.append(label, output); container.append(article);
+  });
 }
 
 function drawChart(run) {
@@ -73,4 +97,29 @@ $('#benchmark-form').addEventListener('submit', async (event) => {
   try { const run=await jsonFetch('/api/benchmark',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); toast('벤치마크가 완료되었습니다.'); await load(); renderMetrics(run); drawChart(run); }
   catch(e){toast(e.message,true)} finally {button.disabled=false;button.innerHTML='벤치마크 실행 <span>→</span>';}
 });
+let convertedMarkdown = null;
+$('#pdf-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const file = event.target.elements.pdf.files[0], button = $('#convert-button');
+  if (!file) return;
+  button.disabled = true; button.innerHTML = '변환 중…';
+  try {
+    const result = await jsonFetch('/api/pdf-to-markdown', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({filename: file.name, data: await fileAsBase64(file)})
+    });
+    convertedMarkdown = result;
+    $('#pdf-meta').textContent = `${result.pages}쪽 · ${result.characters.toLocaleString()}자 · ${fmt(result.elapsed_ms)}`;
+    $('#markdown-preview').textContent = result.markdown.slice(0, 12000);
+    $('#pdf-result').hidden = false;
+    toast('Markdown 변환이 완료되었습니다.');
+  } catch(e) { toast(e.message, true); }
+  finally { button.disabled = false; button.innerHTML = 'Markdown 변환 <span>→</span>'; }
+});
+$('#download-md').onclick = () => {
+  if (!convertedMarkdown) return;
+  const url = URL.createObjectURL(new Blob([convertedMarkdown.markdown], {type: 'text/markdown;charset=utf-8'}));
+  const link = document.createElement('a'); link.href = url; link.download = convertedMarkdown.filename; link.click();
+  URL.revokeObjectURL(url);
+};
 $('#refresh').onclick=load; addEventListener('resize',()=>load()); load();

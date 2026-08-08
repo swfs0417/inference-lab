@@ -1,11 +1,12 @@
 # Inference Lab
 
-OpenAI 호환 API(vLLM, Ollama 프록시 등)의 스트리밍 응답 시간과, 앱이 GPU 서버에서 실행될 때 NVIDIA GPU 지표를 함께 기록하는 교육용 벤치마크 웹 앱입니다. 외부 패키지 없이 Python 3.10+ 표준 라이브러리만 사용합니다.
+OpenAI 호환 API(vLLM, Ollama 프록시 등)의 스트리밍 응답 시간과, 앱이 GPU 서버에서 실행될 때 NVIDIA GPU 지표를 함께 기록하는 교육용 벤치마크 웹 앱입니다. Python 3.10+에서 실행됩니다.
 
 ## 실행
 
 ```powershell
-cd model-benchmark-lab
+cd inference-lab
+python -m pip install -r requirements.txt
 python server.py
 ```
 
@@ -33,6 +34,14 @@ python server.py --host 0.0.0.0 --port 8080
 - GPU 평균/최대, 추정 소비 에너지(Wh), 출력 토큰당 에너지
 - OS, Python, CPU, GPU 이름과 VRAM 등 실행 환경 스냅샷
 - 각 스트리밍 청크의 상대 도착시각
+- 사용자가 직접 입력한 프롬프트를 포함한 CSV/Excel 결과 내보내기
+- PyMuPDF4LLM 기반 PDF → Markdown 변환과 Transformer 논문 예시
+
+## 결과 내보내기와 PDF 변환
+
+최근 결과 영역에서 모델 응답 원문을 확인하고 `CSV` 또는 `Excel` 버튼으로 저장된 실험을 내려받습니다. Excel 파일은 실행 요약(`Runs`)과 응답 원문을 포함한 요청별 측정값(`Samples`) 시트로 구성됩니다.
+
+PDF → Markdown 영역에서는 20MB 이하 PDF를 업로드하고 변환 결과를 미리 본 뒤 `.md`로 저장할 수 있습니다. PyMuPDF4LLM/PyMuPDF는 AGPL 또는 별도 상용 라이선스로 제공되므로, 비공개 상용 배포 전에는 라이선스 조건을 확인하세요.
 
 ## 측정 해석
 

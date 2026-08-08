@@ -1,12 +1,40 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><style>
-body{width:310px;margin:0;padding:18px;background:#f3f1e9;color:#17352e;font:13px system-ui}h1{font:24px Georgia;margin:0 0 16px}label{display:block;margin:11px 0;font-size:11px;color:#66706a}input{box-sizing:border-box;width:100%;padding:9px;margin-top:5px;border:1px solid #ccd2cc;background:white}.toggle{display:flex;align-items:center;gap:8px;color:#17352e}.toggle input{width:auto;margin:0}button{width:100%;margin-top:8px;padding:10px;border:0;background:#17352e;color:white;font-weight:700}.status{margin-top:13px;padding:10px;background:white;border-left:3px solid #d57742;line-height:1.5}.small{font-size:11px;color:#737c76;line-height:1.5}</style></head>
-<body><h1>Edu Timer</h1>
-<label class="toggle"><input id="enabled" type="checkbox"> 자동 측정 활성화</label>
-<label>대시보드 주소<input id="backendUrl" value="http://127.0.0.1:8080"></label>
-<label>모델 라벨<input id="modelLabel" value="GPT Edu"></label>
-<label>완료 판정 대기시간(ms)<input id="completionQuietMs" type="number" value="1800" min="800" step="100"></label>
-<button id="save">설정 저장</button>
-<div id="status" class="status">아직 측정 기록이 없습니다.</div>
-<p class="small">대화 내용과 로그인 정보는 전송하지 않습니다. 시간, 응답 글자 수, 모델 라벨만 저장합니다.</p>
-<script src="popup.js"></script></body></html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root{--ink:#17352e;--muted:#66706a;--paper:#f3f1e9;--line:#ccd2cc;--accent:#d57742}
+    *{box-sizing:border-box}body{width:380px;margin:0;padding:18px;background:var(--paper);color:var(--ink);font:13px system-ui}
+    h1{font:24px Georgia;margin:0}h2{font-size:13px;margin:0}.header,.section-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .eyebrow{font:10px ui-monospace,monospace;color:var(--accent);letter-spacing:1px}.settings{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+    label{display:block;margin:11px 0;font-size:11px;color:var(--muted)}input{box-sizing:border-box;width:100%;padding:9px;margin-top:5px;border:1px solid var(--line);background:white}
+    .toggle{display:flex;align-items:center;gap:8px;color:var(--ink)}.toggle input{width:auto;margin:0}button,a.button{padding:9px 11px;border:0;background:var(--ink);color:white;font-weight:700;text-decoration:none;cursor:pointer;text-align:center}
+    .ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}#save{width:100%;margin-top:8px}.status{margin-top:13px;padding:10px;background:white;border-left:3px solid var(--accent);line-height:1.5}
+    .results{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}#runs{display:grid;gap:8px;margin-top:10px}.run{padding:11px;background:white;border:1px solid var(--line)}
+    .run-head{display:flex;justify-content:space-between;gap:10px}.run-head b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.run-head time{flex:none;color:var(--muted);font:10px ui-monospace,monospace}
+    .source{margin:3px 0 9px;color:var(--muted);font:10px ui-monospace,monospace}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line)}
+    .metric{padding:7px 5px;background:#fafbf8}.metric span{display:block;color:var(--muted);font-size:9px}.metric strong{display:block;margin-top:3px;font:12px ui-monospace,monospace}.empty{padding:18px;text-align:center;color:var(--muted);background:white}
+    .small{font-size:11px;color:#737c76;line-height:1.5}
+  </style>
+</head>
+<body>
+  <div class="header"><div><div class="eyebrow">BROWSER E2E</div><h1>Edu Timer</h1></div><a id="dashboard" class="button ghost" target="_blank">웹 대시보드</a></div>
+  <div id="status" class="status">아직 측정 기록이 없습니다.</div>
+
+  <section class="results">
+    <div class="section-head"><h2>최근 실험 결과</h2><button id="refresh" class="ghost" type="button">새로고침</button></div>
+    <div id="runs"><div class="empty">결과를 불러오는 중…</div></div>
+  </section>
+
+  <section class="settings">
+    <div class="section-head"><h2>측정 설정</h2></div>
+    <label class="toggle"><input id="enabled" type="checkbox"> 자동 측정 활성화</label>
+    <label>대시보드 주소<input id="backendUrl" value="http://127.0.0.1:8080"></label>
+    <label>모델 라벨<input id="modelLabel" value="GPT Edu"></label>
+    <label>완료 판정 대기시간(ms)<input id="completionQuietMs" type="number" value="1800" min="800" step="100"></label>
+    <button id="save">설정 저장</button>
+  </section>
+  <p class="small">API와 Browser E2E 결과를 같은 형식으로 표시합니다. Browser E2E에는 브라우저 렌더링과 네트워크 시간이 포함됩니다.</p>
+  <script src="popup.js"></script>
+</body>
+</html>
